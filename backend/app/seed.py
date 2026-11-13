@@ -178,10 +178,11 @@ def init_db() -> None:
                 # Inventory — 纯主集
                 (2, "sku 必填", "sku", "required", "error", "{}", 1, "main"),
                 (2, "on_hand 须为整数", "on_hand", "type_int", "error", "{}", 1, "main"),
-                # Shadow demo — 主集两条 + 影子集一条（暗跑观察，不参与处置）
+                # Shadow demo — 主集两条 + 影子集一条（暗跑观察，不参与处置；
+                # error 级才能验证“影子多拦也不许进隔离/减签发”）
                 (3, "sku 必填", "sku", "required", "error", "{}", 1, "main"),
                 (3, "price 须为数字", "price", "type_number", "error", "{}", 1, "main"),
-                (3, "tag 必填（影子暗跑）", "tag", "required", "warn", "{}", 1, "shadow"),
+                (3, "tag 必填（影子暗跑）", "tag", "required", "error", "{}", 1, "shadow"),
             ],
         )
         conn.execute(

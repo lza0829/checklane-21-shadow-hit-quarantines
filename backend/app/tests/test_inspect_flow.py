@@ -127,9 +127,70 @@ def test_shadow_hits_persisted_but_never_quarantine_or_block_release(env):
         "curated_table_matches",
         "shadow_hits_persisted",
         "diff_counts_match_rows",
+        "shadow_only_diff_matches_ledger",
         "shadow_never_blocks",
     ):
         _check(detail, name)
+
+
+def test_shadow_error_hit_never_blocks_main_pass(env):
+    """回归：影子规则即便为 error 级，命中也只进影子账，不进隔离、不减签发。"""
+    from app.db import connect
+    from app.repositories import quarantine as quarantine_repo
+    from app.repositories import rules as rules_repo
+
+    conn = connect()
+    try:
+        rule = next(r for r in rules_repo.list_rules(conn, SHADOW_DATASET) if r["id"] == 8)
+        assert rule["track"] == "shadow"
+        rules_repo.set_severity(conn, 8, "error")
+        conn.commit()
+    finally:
+        conn.close()
+
+    detail = env.run_inspect(SHADOW_DATASET)
+    bid = detail["id"]
+
+    # 主集口径不变：SH-2/SH-3 隔离，SH-1/SH-4 签发；影子 error 不多拦任何行
+    assert detail["quarantined_count"] == 2
+    assert detail["passed_count"] == 2
+    assert detail["released_count"] == 2
+
+    rows = {r["entity_key"]: r for r in detail["rows"]}
+    sh1 = rows["SH-1"]
+    assert sh1["disposition"] == "pass"
+    assert sh1["rule_hits"] == []
+    assert len(sh1["shadow_hits"]) == 1 and sh1["shadow_hits"][0]["severity"] == "error"
+
+    # 「主过影子中」差分仍准确指出 SH-1 这一行
+    counts = detail["report"]["diff"]["counts"]
+    assert counts["shadow_only"] == 1
+    assert [d["entity_key"] for d in detail["report"]["diff"]["details"]["shadow_only"]] == ["SH-1"]
+
+    conn = connect()
+    try:
+        q_keys = sorted(
+            r["entity_key"]
+            for r in quarantine_repo.list_all(conn)
+            if r["batch_id"] == bid
+        )
+        assert q_keys == ["SH-2", "SH-3"]
+        curated = conn.execute(
+            "SELECT entity_key FROM curated WHERE batch_id=? ORDER BY entity_key", (bid,)
+        ).fetchall()
+        assert [r["entity_key"] for r in curated] == ["SH-1", "SH-4"]
+        shadow_rows = conn.execute(
+            "SELECT entity_key, rule_id FROM shadow_hits WHERE batch_id=? ORDER BY row_no", (bid,)
+        ).fetchall()
+        assert [dict(r) for r in shadow_rows] == [
+            {"entity_key": "SH-1", "rule_id": 8},
+            {"entity_key": "SH-3", "rule_id": 8},
+        ]
+    finally:
+        conn.close()
+
+    _check(detail, "shadow_only_diff_matches_ledger")
+    _check(detail, "shadow_never_blocks")
 
 
 def test_shadow_disabled_equals_single_main_track(env):

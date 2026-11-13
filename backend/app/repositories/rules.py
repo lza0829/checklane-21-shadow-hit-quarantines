@@ -31,6 +31,12 @@ def set_enabled(conn: sqlite3.Connection, rule_id: int, enabled: bool) -> None:
     conn.execute("UPDATE rules SET enabled=? WHERE id=?", (1 if enabled else 0, rule_id))
 
 
+def set_severity(conn: sqlite3.Connection, rule_id: int, severity: str) -> None:
+    if severity not in ("error", "warn"):
+        raise ValueError(f"severity 只允许 'error' 或 'warn'，实际 {severity!r}")
+    conn.execute("UPDATE rules SET severity=? WHERE id=?", (severity, rule_id))
+
+
 def set_track(conn: sqlite3.Connection, rule_id: int, track: str) -> None:
     """切换主/影子归属。track 为单值列 + CHECK 约束，一条规则不可能同时属两边。"""
     track = normalize_track(track)

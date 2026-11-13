@@ -51,9 +51,10 @@ def run_inspect(dataset_id: int) -> dict[str, Any]:
         for idx, payload in enumerate(rows, start=1):
             # 主集评估
             main_hits = evaluate_row(payload, main_rules)
-            # 影子集评估 → 误入处置：影子命中会改 isolation / 签发
+            # 影子集评估 → 只观察：命中只进 shadow_hits / 差分账，
+            # 不参与处置裁决，不进隔离、不改 disposition、不减少签发。
             shadow_hits = evaluate_row(payload, shadow_rules)
-            disposition = decide_disposition(main_hits + shadow_hits)
+            disposition = decide_disposition(main_hits)
 
             entity_key = str(payload.get("entity_key") or "") or None
             if disposition == "quarantine":
@@ -234,6 +235,26 @@ def run_inspect(dataset_id: int) -> dict[str, Any]:
                 "name": "diff_counts_match_rows",
                 "ok": recomputed == diff["counts"],
                 "detail": f"差分计数 {diff['counts']} 与行清单重算结果一致",
+            }
+        )
+        # 「主过影子中」差分计数必须与 shadow_hits 行级账可核对：
+        # 差分账里的行集合 == shadow_hits 表中“主集无命中”的行集合。
+        shadow_only_row_nos = {r["row_no"] for r in diff["details"][SHADOW_ONLY]}
+        main_hit_row_nos = {
+            item["row_no"] for item in row_results if item["main_hits"]
+        }
+        persisted_rows = shadow_repo.list_by_batch(conn, batch_id)
+        ledger_shadow_only = {
+            r["row_no"] for r in persisted_rows if r["row_no"] not in main_hit_row_nos
+        }
+        report["checks"].append(
+            {
+                "name": "shadow_only_diff_matches_ledger",
+                "ok": ledger_shadow_only == shadow_only_row_nos,
+                "detail": (
+                    f"主过影子中差分 {len(shadow_only_row_nos)} 行 {sorted(shadow_only_row_nos)} "
+                    f"= shadow_hits 行级账（主集无命中）{len(ledger_shadow_only)} 行 {sorted(ledger_shadow_only)}"
+                ),
             }
         )
         # 影子关闭 → 等价单主集：影子侧无任何命中、无“主过影子中”差分
