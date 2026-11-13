@@ -1,0 +1,4 @@
+{"entity_key":"SH-1","sku":"SKU-S1","price":10.0,"qty":1,"tag":"","title":"主过影子中：主集全过，影子 tag 必填多拦一行；仍按主集签发"}
+{"entity_key":"SH-2","sku":"SKU-S2","price":"bad","qty":2,"tag":"vip","title":"主中影子过：price 非数字被主集隔离，影子 tag 有值未中"}
+{"entity_key":"SH-3","sku":"","price":7.5,"qty":3,"tag":"","title":"两侧都中：主集 sku 缺失隔离，影子 tag 也命中"}
+{"entity_key":"SH-4","sku":"SKU-S4","price":16.0,"qty":4,"tag":"normal","title":"两侧都过：干净行"}
